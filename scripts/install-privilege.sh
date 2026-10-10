@@ -70,4 +70,39 @@ UDEV_DST="/etc/udev/rules.d/99-omalegion-rgb.rules"
 chmod 0644 "$UDEV_DST"
 udevadm control --reload-rules >/dev/null 2>&1 || true
 udevadm trigger --subsystem-match=hidraw --action=change >/dev/null 2>&1 || true
+
+# Revoke world permissions granted by pre-1.4.1 rules on nodes that are
+# already plugged in. The trigger above should re-apply permissions, but it
+# can fail silently, so strip the bits explicitly on every node the old rule
+# could have opened (same vendor/product scope). Unplugged devices pick up
+# the new rule when they next appear. Fail loudly rather than reporting
+# success with world-writable nodes left behind.
+revoke_failed=0
+for hidraw in /sys/class/hidraw/hidraw*; do
+  [ -e "$hidraw" ] || continue
+  uevent="$hidraw/device/uevent"
+  [ -r "$uevent" ] || continue
+  upper="$(tr '[:lower:]' '[:upper:]' < "$uevent" 2>/dev/null)" || continue
+  case "$upper" in
+    *048D*) ;;
+    *) continue ;;
+  esac
+  family_match=0
+  for pid in $(printf '%s' "$upper" | grep -oE 'C[0-9A-F]{3}' || true); do
+    case "$pid" in
+      C1*|C6*|C9*) family_match=1; break ;;
+    esac
+  done
+  [ "$family_match" -eq 1 ] || continue
+  node="/dev/$(basename "$hidraw")"
+  [ -e "$node" ] || continue
+  if ! chmod o-rw "$node" 2>/dev/null; then
+    echo "warning: could not revoke world permissions on $node" >&2
+    revoke_failed=1
+  fi
+done
+if [ "$revoke_failed" -ne 0 ]; then
+  echo "error: some keyboard nodes could not be secured; not reporting success" >&2
+  exit 1
+fi
 echo "omalegion keyboard RGB access installed (unplug/replug or reboot if the keyboard is not yet accessible)"
