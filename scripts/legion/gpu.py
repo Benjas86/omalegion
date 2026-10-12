@@ -76,7 +76,7 @@ WORKING_MODES = [
 
 
 def _find_pci(vendor_id: str) -> Path | None:
-    for dev in sorted(Path("/sys/bus/pci/devices")):
+    for dev in sorted(Path("/sys/bus/pci/devices").iterdir()):
         if (read_text(dev / "class") or "").startswith("0x030") and (read_text(dev / "vendor") or "").lower() == vendor_id:
             return dev
     return None

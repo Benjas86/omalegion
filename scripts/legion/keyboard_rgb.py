@@ -149,10 +149,8 @@ def _helper(args: list[str], timeout: float = 15.0) -> str | None:
 
 
 def _set_report(node: str, data: bytes) -> bool:
-    if os.geteuid() == 0 and _direct_set(node, data):
+    if _direct_set(node, data):
         return True
-    if os.geteuid() == 0:
-        return False
     padded = bytes(data[:REPORT_SIZE]).ljust(REPORT_SIZE, b"\x00")
     return _helper(["hid-set", node, padded.hex()]) is not None
 
